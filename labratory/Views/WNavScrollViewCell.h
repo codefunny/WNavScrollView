@@ -12,8 +12,16 @@
 
 @property (nonatomic,strong) NSString   *text;
 @property (nonatomic,strong) UIColor    *textColor;
+@property (nonatomic,strong) UIFont     *textFont;
+@property (nonatomic,strong) UIColor    *selectedColor;
+@property (nonatomic,strong) UIFont     *selectedFont;
 @property (nonatomic,strong) UIColor    *indicateColor;
 @property (nonatomic,strong) NSString   *reuseIdentifier;
 @property (nonatomic,assign) BOOL       showIndicate;
+@property (nonatomic,assign) BOOL       selected;
+
+@property (nonatomic,readonly) UIView   *indicateView;
+
+- (instancetype)initReuseIdentifier:(NSString *)reuseIdentifier ;
 
 @end

@@ -9,6 +9,13 @@
 #import <UIKit/UIKit.h>
 #import "WNavScrollViewCell.h"
 
+#ifdef DEBUG
+#define WLOG(...) NSLog(__VA_ARGS__);
+#define WLOG_METHOD NSLog(@"%s", __func__);
+#else
+#define WLOG(...); #define LOG_METHOD;
+#endif
+
 @class WNavScrollView;
 @protocol WNavScrollViewDataSource <NSObject>
 
@@ -33,5 +40,6 @@
 - (WNavScrollViewCell *)dequeueReusableCellWithIdentifier:(NSString *)identifier ;
 - (void)reloadData ;
 - (void)scrollToNextCellAtIndex:(NSInteger)index ;
+- (void)navScrollViewDidScrollPage:(NSInteger)iPage ratio:(CGFloat)offsetX ;
 
 @end

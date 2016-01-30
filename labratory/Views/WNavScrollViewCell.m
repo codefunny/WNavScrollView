@@ -8,7 +8,7 @@
 
 #import "WNavScrollViewCell.h"
 
-static const CGFloat kIndicateHeight = 5.f;
+static const CGFloat kIndicateHeight = 2.f;
 
 @interface WNavScrollViewCell ()
 
@@ -18,6 +18,17 @@ static const CGFloat kIndicateHeight = 5.f;
 @end
 
 @implementation WNavScrollViewCell
+
+- (instancetype)initReuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super init];
+    if (self) {
+        self.reuseIdentifier = reuseIdentifier;
+        [self setUp];
+    }
+    
+    return self;
+
+}
 
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
@@ -38,6 +49,10 @@ static const CGFloat kIndicateHeight = 5.f;
 }
 
 - (void)setUp {
+    _textColor = [UIColor blackColor];
+    _textFont = [UIFont systemFontOfSize:15.];
+    _selectedFont = [UIFont systemFontOfSize:18.];
+    _selectedColor = [UIColor orangeColor];
     [self addSubview:self.textLabel];
     [self addSubview:self.indicateView];
 }
@@ -50,24 +65,30 @@ static const CGFloat kIndicateHeight = 5.f;
     self.indicateView.frame = CGRectMake(0, viewRect.size.height - kIndicateHeight, viewRect.size.width, kIndicateHeight);
 }
 
+- (void)setSelected:(BOOL)selected {
+    if (selected) {
+        self.textLabel.textColor = self.selectedColor;
+        self.textLabel.font = self.selectedFont;
+    } else {
+        self.textLabel.textColor = _textColor;
+        self.textLabel.font = _textFont;
+    }
+    
+    [self setNeedsDisplay];
+}
+
 #pragma mark - getter/setter
 
 - (void)setText:(NSString *)text {
     _text = text;
     self.textLabel.text = text;
-    [self setNeedsLayout];
-}
-
-- (void)setTextColor:(UIColor *)textColor {
-    _textColor = textColor;
-    self.textLabel.textColor = _textColor;
-    [self setNeedsLayout];
+    [self setNeedsDisplay];
 }
 
 - (void)setIndicateColor:(UIColor *)indicateColor {
     _indicateColor = indicateColor;
     self.indicateView.backgroundColor = _indicateColor;
-    [self setNeedsLayout];
+    [self setNeedsDisplay];
 }
 
 - (void)setShowIndicate:(BOOL)showIndicate {
@@ -77,9 +98,9 @@ static const CGFloat kIndicateHeight = 5.f;
 - (UILabel *)textLabel {
     if (!_textLabel) {
         _textLabel = [[UILabel alloc] init];
-        _textLabel.textColor = [UIColor blackColor];
+        _textLabel.textColor = _textColor;
         _textLabel.textAlignment = NSTextAlignmentCenter;
-        _textLabel.font = [UIFont systemFontOfSize:16];
+        _textLabel.font = _textFont;
     }
     
     return _textLabel;
@@ -87,7 +108,9 @@ static const CGFloat kIndicateHeight = 5.f;
 
 - (UIView *)indicateView {
     if (!_indicateView) {
+        CGRect viewRect = self.bounds;
         _indicateView = [[UIView alloc] init];
+        _indicateView.frame = CGRectMake(0, viewRect.size.height - kIndicateHeight, viewRect.size.width, kIndicateHeight);
         _indicateView.backgroundColor = [UIColor orangeColor];
         _indicateView.hidden = YES;
     }

@@ -8,12 +8,13 @@
 
 #import "WNavScrollView.h"
 
-static const CGFloat defaultRowHeight = 80.f;
+static const CGFloat defaultColumeWidth = 80.f;
 
 @interface WNavScrollView () {
     BOOL _needsReload;
     NSMutableSet *_reusableCells;
     NSMutableDictionary *_cachedCells;
+    NSMutableArray      *_cellFrames;
     NSInteger   _currentIndex;
     
     struct{
@@ -28,6 +29,8 @@ static const CGFloat defaultRowHeight = 80.f;
 }
 
 @property (nonatomic,strong) NSMutableArray     *reuse;
+
+@property (nonatomic,strong) UIView   *indicateView;
 
 @end
 
@@ -55,10 +58,13 @@ static const CGFloat defaultRowHeight = 80.f;
     _reusableCells = [[NSMutableSet alloc] init];
     _cachedCells = [[NSMutableDictionary alloc] init];
     _currentIndex = 0;
+    _needsReload = NO;
 
     self.showsVerticalScrollIndicator = NO;
     self.showsHorizontalScrollIndicator = NO;
-//    self.pagingEnabled = YES;
+}
+
+- (void)dealloc {
     
 }
 
@@ -112,7 +118,7 @@ static const CGFloat defaultRowHeight = 80.f;
     CGFloat offset = 0;
     
     for (NSInteger i=0; i<columesCount; i++) {
-        const CGFloat width = _delegateHas.widthForColumesAtIndexPath ? [self.navDelegate navScrollView:self widthForColumesAtIndexPath:i] : defaultRowHeight;
+        const CGFloat width = [_cellFrames[i] CGRectValue].size.width;
         CGRect simpleRowRect = CGRectMake(offset, rect.origin.y, width, rect.size.height);
         
         if (CGRectIntersectsRect(rect,simpleRowRect)) {
@@ -127,23 +133,64 @@ static const CGFloat defaultRowHeight = 80.f;
     return results;
 }
 
+- (void)navScrollViewDidScrollPage:(NSInteger)iPage ratio:(CGFloat)offsetX {
+    WNavScrollViewCell *cell = [self cellForColumeAtIndex:_currentIndex];
+    CGFloat offSet = 0;
+    
+    if (offsetX == 0) {
+        return ;
+    }
+    
+    if (iPage == _currentIndex) {
+         offSet = (offsetX * cell.bounds.size.width);
+    } else {
+         offSet = (offsetX * cell.bounds.size.width) - cell.bounds.size.width;
+    }
+    WLOG(@"cell:%@,setX:%lf,ipage:%ld,idex:%ld",NSStringFromCGRect(cell.bounds),offSet,iPage,_currentIndex);
+    
+    CGRect frame = cell.indicateView.frame;
+    frame.origin.x = offSet;
+    cell.indicateView.frame = frame;
+}
+
 - (void)scrollToNextCellAtIndex:(NSInteger)index {
     if (_currentIndex == index) {
         return;
     }
     
-    WNavScrollViewCell *fromCell = [self cellForColumeAtIndex:_currentIndex];
-    WNavScrollViewCell *toCell = [self cellForColumeAtIndex:index];
+    __block WNavScrollViewCell *fromCell = [self cellForColumeAtIndex:_currentIndex];
+    __block WNavScrollViewCell *toCell = [self cellForColumeAtIndex:index];
+    if (fromCell.indicateView.frame.origin.x != 0) {
+        fromCell.showIndicate = NO;
+        fromCell.selected = NO;
+        CGRect rect = fromCell.indicateView.frame;
+        rect.origin.x = 0;
+        fromCell.indicateView.frame = rect;
+        toCell.showIndicate = YES;
+        toCell.selected = YES;
+        _currentIndex = index;
+        [self _scrollRectToVisible:toCell.frame animated:YES];
+        
+        return ;
+    }
     
+    WLOG(@"tag:%ld,%ld",fromCell.tag,toCell.tag);
+    CGFloat transX = CGRectGetMaxX(toCell.frame) - CGRectGetMaxX(fromCell.frame);
+    CGPoint center = fromCell.indicateView.center;
+    CGPoint orginCenter = center;
+    center.x += (transX);
     __weak typeof(self) weakSelf = self;
     [UIView animateWithDuration:0.3 animations:^{
-        fromCell.showIndicate = NO;
-        toCell.showIndicate = YES;
+        fromCell.indicateView.center = center ;
     } completion:^(BOOL finished) {
+        fromCell.showIndicate = NO;
+        fromCell.selected = NO;
+        fromCell.indicateView.center = orginCenter;
+        toCell.showIndicate = YES;
+        toCell.selected = YES;
         _currentIndex = index;
-        if (![weakSelf isInScreen:toCell.frame]) {
-            [weakSelf _scrollRectToVisible:toCell.frame animated:YES];
-        }
+        [weakSelf _scrollRectToVisible:toCell.frame animated:YES];
+        
     }];
 }
 
@@ -158,8 +205,25 @@ static const CGFloat defaultRowHeight = 80.f;
 
 - (void)_scrollRectToVisible:(CGRect)aRect animated:(BOOL)animated {
     if (!CGRectIsNull(aRect) && aRect.size.width > 0) {
-        aRect.size.width += aRect.size.width/2;
-        [self scrollRectToVisible:aRect animated:animated];
+        CGRect  rect = self.bounds;
+        CGFloat pointX = CGRectGetMidX(aRect);
+        CGFloat subValue = pointX - rect.size.width/2.;
+        CGFloat offsetToRight = self.contentSize.width - pointX;
+        WLOG(@"%lf,offset:%f",pointX,self.contentOffset.x);
+        if (subValue > 0) {
+            if (offsetToRight > rect.size.width/2. ) {
+                [self setContentOffset:CGPointMake(subValue, 0) animated:animated];
+            } else {
+                CGFloat externOffset = self.contentSize.width - rect.size.width;
+                if (externOffset > self.contentOffset.x) {
+                    [self setContentOffset:CGPointMake(externOffset, 0) animated:animated];
+                }
+            }
+        } else {
+            if (self.contentOffset.x > 0) {
+                [self setContentOffset:CGPointZero animated:animated];
+            }
+        }
     }
 }
 
@@ -170,37 +234,41 @@ static const CGFloat defaultRowHeight = 80.f;
     }
     
     const CGSize  boundsSize = self.bounds.size;
-    const CGFloat contentOffset = self.contentOffset.y;
-    const CGRect  visibleBounds = CGRectMake(0,contentOffset,boundsSize.width,boundsSize.height);
+    const CGFloat contentOffset = self.contentOffset.x;
+    const CGRect  visibleBounds = CGRectMake(contentOffset,0,boundsSize.width,boundsSize.height);
     NSMutableDictionary *availableCells = [_cachedCells mutableCopy];
-    [_cachedCells removeAllObjects];
     
     for (NSInteger i = 0; i <  columesCount; i++) {
-        WNavScrollViewCell *cell = [self.dataSource navScrollView:self cellForRowAtIndexPath:i];
-        CGRect rect = cell.bounds;
-        rect.origin.x = i * rect.size.width;
-        cell.frame = rect;
-        [_cachedCells setObject:cell forKey:@(i)];
-        if (i == _currentIndex) {
-            cell.showIndicate = YES ;
+        CGRect  cellRect = [_cellFrames[i] CGRectValue];
+        WNavScrollViewCell *cell = _cachedCells[@(i)];
+        if (CGRectIntersectsRect(cellRect,visibleBounds)) {
+            if (cell == nil) {
+                WNavScrollViewCell *cell = [self.dataSource navScrollView:self cellForRowAtIndexPath:i];
+                CGRect rect = cellRect;
+                rect.size.height = self.bounds.size.height;
+                cell.frame = rect;
+                [_cachedCells setObject:cell forKey:@(i)];
+                if (i == _currentIndex) {
+                    cell.showIndicate = YES ;
+                    cell.selected = YES;
+                } else {
+                    cell.showIndicate = NO ;
+                    cell.selected = NO;
+                }
+                cell.tag = 100 + i;
+                [self addSubview:cell];
+            }
         } else {
-            cell.showIndicate = NO ;
+            if (cell) {
+                [cell removeFromSuperview];
+                [_cachedCells removeObjectForKey:@(i)];
+            }
         }
-        [self addSubview:cell];
     }
     
     for (WNavScrollViewCell *cell in [availableCells allValues]) {
-        if (cell.reuseIdentifier) {
+        if (cell.reuseIdentifier && !CGRectIntersectsRect(cell.frame, visibleBounds)) {
             [_reusableCells addObject:cell];
-        } else {
-            [cell removeFromSuperview];
-        }
-    }
-    
-    NSArray* allCachedCells = [_cachedCells allValues];
-    for (WNavScrollViewCell *cell in _reusableCells) {
-        if (CGRectIntersectsRect(cell.frame,visibleBounds) && ![allCachedCells containsObject: cell]) {
-            [cell removeFromSuperview];
         }
     }
 }
@@ -211,10 +279,18 @@ static const CGFloat defaultRowHeight = 80.f;
         return;
     }
     
+    if (!_cellFrames) {
+        _cellFrames = [NSMutableArray array];
+    }
+    
+    [_cellFrames removeAllObjects];
     CGFloat totalWidth = 0;
 
     for (NSInteger row=0; row<columesCount; row++) {
-        const CGFloat columWidth = _delegateHas.widthForColumesAtIndexPath? [self.navDelegate navScrollView:self widthForColumesAtIndexPath:row] : defaultRowHeight;
+        const CGFloat columWidth = _delegateHas.widthForColumesAtIndexPath? [self.navDelegate navScrollView:self widthForColumesAtIndexPath:row] : defaultColumeWidth;
+        
+        CGRect cellRect = CGRectMake(totalWidth, 0, columWidth, 1);
+        [_cellFrames addObject:[NSValue valueWithCGRect:cellRect]];
         totalWidth += columWidth;
     }
     
@@ -239,6 +315,11 @@ static const CGFloat defaultRowHeight = 80.f;
 }
 
 - (void)reloadData {
+    [[_cachedCells allValues] makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [_reusableCells makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [_reusableCells removeAllObjects];
+    [_cachedCells removeAllObjects];
+    
     [self _contentSize];
     _needsReload = NO;
 }
@@ -249,8 +330,9 @@ static const CGFloat defaultRowHeight = 80.f;
 }
 
 - (BOOL)isInScreen:(CGRect)frame {
-    return (CGRectGetMinX(frame) > self.contentOffset.x) &&
-    (CGRectGetMaxX(frame) < self.contentOffset.x + self.bounds.size.width);
+    WLOG(@"%@",NSStringFromCGRect(self.bounds));
+    return (CGRectGetMaxX(frame) > self.contentOffset.x) &&
+    (CGRectGetMinX(frame) < self.contentOffset.x + self.bounds.size.width);
 }
 
 @end

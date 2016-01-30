@@ -10,7 +10,6 @@
 #import "ViewController.h"
 #import "WNavScrollView.h"
 
-static const NSInteger kTestCount = 8;
 #define  kScreenWidth [UIScreen mainScreen].bounds.size.width
 
 @interface WChangeViewController () <WNavScrollViewDataSource,WNavScrollViewDelegate,UIScrollViewDelegate>
@@ -29,6 +28,16 @@ static const NSInteger kTestCount = 8;
     }];
 }
 
+static NSArray* dataSource(){
+    static NSArray* items = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        items = @[@"测试",@"哈哈",@"2016",@"2015",@"明天更好",@"红包",@"春节",@"猴年大吉"];
+    });
+    
+    return items;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view.
@@ -39,8 +48,6 @@ static const NSInteger kTestCount = 8;
     [self addContentView];
     
     [self.view setBackgroundColor:[UIColor whiteColor]];
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panGestureRecognizer:)];
-    [self.view addGestureRecognizer:pan];
     
     UIBarButtonItem *rightBar = [[UIBarButtonItem alloc]initWithTitle:@"refresh" style:UIBarButtonItemStylePlain target:self action:@selector(refresh)];
     self.navigationItem.rightBarButtonItem = rightBar;
@@ -53,41 +60,6 @@ static const NSInteger kTestCount = 8;
 
 - (void)refresh {
     self.view.backgroundColor = [UIColor whiteColor];
-}
-
-- (void)panGestureRecognizer:(UIPanGestureRecognizer *)recognizer {
-//    [self exchangeView];
-//    [self exchangeSubView];
-    UIView* view = self.view;
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
-        // 获取手势的触摸点坐标
-        CGPoint location = [recognizer locationInView:view];
-        // 判断,用户从右半边滑动的时候,推出下一个VC(根据实际需要是推进还是推出)
-        if (location.x > CGRectGetMidX(view.bounds) && self.navigationController.viewControllers.count == 1){
-//            self.interactionController = [[UIPercentDrivenInteractiveTransition alloc] init];
-            //
-//            [self presentViewController:_nextVC animated:YES completion:nil];
-        }
-    } else if (recognizer.state == UIGestureRecognizerStateChanged) {
-        // 获取手势在视图上偏移的坐标
-        CGPoint translation = [recognizer translationInView:view];
-        // 根据手指拖动的距离计算一个百分比，切换的动画效果也随着这个百分比来走
-        CGFloat distance = fabs(translation.x / CGRectGetWidth(view.bounds));
-        // 交互控制器控制动画的进度
-//        [self.interactionController updateInteractiveTransition:distance];
-    } else if (recognizer.state == UIGestureRecognizerStateEnded) {
-        CGPoint translation = [recognizer translationInView:view];
-        // 根据手指拖动的距离计算一个百分比，切换的动画效果也随着这个百分比来走
-        CGFloat distance = fabs(translation.x / CGRectGetWidth(view.bounds));
-        // 移动超过一半就强制完成
-        if (distance > 0.5) {
-//            [self.interactionController finishInteractiveTransition];
-        } else {
-//            [self.interactionController cancelInteractiveTransition];
-        }
-        // 结束后一定要置为nil
-//        self.interactionController = nil;
-    }
 }
 
 - (void)exchangeView {
@@ -109,7 +81,7 @@ static const NSInteger kTestCount = 8;
 
 - (void)addContentView {
     
-    NSInteger count = kTestCount;
+    NSInteger count = dataSource().count;
     for (NSInteger i = 0; i < count; i++) {
         UIView *view = [[UIView alloc] init];
         if (i % 2) {
@@ -121,10 +93,26 @@ static const NSInteger kTestCount = 8;
         [self.controllerView addSubview:view];
     }
     
-    self.controllerView.contentSize = CGSizeMake(8 * self.controllerView.bounds.size.width, self.controllerView.bounds.size.height);
+    self.controllerView.contentSize = CGSizeMake(count * self.controllerView.bounds.size.width, self.controllerView.bounds.size.height);
 }
 
 #pragma mark - 
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    WLOG(@"%d,%d,%d",scrollView.isDragging,scrollView.isTracking,scrollView.isDecelerating);
+    if (!scrollView.isDragging && scrollView.isDecelerating == NO) {
+        return ;
+    }
+    
+    WLOG(@"offset:%lf",scrollView.contentOffset.x);
+    CGFloat offSet = scrollView.contentOffset.x ;
+    CGFloat width = kScreenWidth;
+    NSInteger iPage = offSet / width;
+    CGFloat offsetX = offSet - iPage * width;
+    WLOG(@"offx:%ld,ratio:%lf",iPage,offsetX/width);
+    
+    [self.navScrollView navScrollViewDidScrollPage:(NSInteger)iPage ratio:offsetX/width];
+}
+
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
     CGFloat offSet = scrollView.contentOffset.x ;
     CGFloat width = kScreenWidth;
@@ -134,17 +122,19 @@ static const NSInteger kTestCount = 8;
 
 #pragma mark wnavScrollDatasource
 - (NSInteger)numberOfColumesInScrollView:(WNavScrollView *)scrollView {
-    return kTestCount;
+    return dataSource().count;
 }
 
 - (WNavScrollViewCell *)navScrollView:(WNavScrollView *)scrollView cellForRowAtIndexPath:(NSUInteger)index {
     WNavScrollViewCell *cell = [scrollView dequeueReusableCellWithIdentifier:@"scrollCell"];
     if (!cell) {
-        CGRect rect = CGRectMake(0, 0, 80, scrollView.bounds.size.height);
-        cell = [[WNavScrollViewCell alloc] initWithFrame:rect];
+        cell = [[WNavScrollViewCell alloc] initReuseIdentifier:@"scrollCell"];
     }
     
-    cell.text = @"测试一下";
+    cell.text = dataSource()[index];
+    cell.textColor = [UIColor blackColor];
+    cell.selectedColor = [UIColor orangeColor];
+    cell.selectedFont = [UIFont systemFontOfSize:17.];
     
     return cell;
 }
